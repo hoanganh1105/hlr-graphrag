@@ -26,34 +26,22 @@ class KGRetriever:
 
     def __init__(
         self,
-        triple_file: str,
+        triple_files: list,   # đổi từ triple_file (str) sang triple_files (list)
         entity_file: str,
         relation_file: str,
     ):
-        """
-        triple_file  : đường dẫn tới file triple
-                       (Wikidata5M-RE_transductive_train.txt)
-        entity_file  : đường dẫn tới wikidata5m_entity.txt
-        relation_file: đường dẫn tới wikidata5m_relation.txt
-        """
         print("=== Khởi tạo KG Retriever ===")
-
         print("[1/3] Load entity labels...")
         self.entity_label = self._load_labels(entity_file)
-
         print("[2/3] Load relation labels...")
         self.relation_label = self._load_labels(relation_file)
+        print("[3/3] Load triple index (gộp tất cả split)...")
+        self.index = self._load_triple_index(triple_files)
 
-        print("[3/3] Load triple index...")
-        self.index = self._load_triple_index(triple_file)
-
-        total_entities  = len(self.entity_label)
-        total_relations = len(self.relation_label)
-        total_subjects  = len(self.index)
         print(f"\n✅ KG Retriever sẵn sàng:")
-        print(f"   Entities  : {total_entities:,}")
-        print(f"   Relations : {total_relations:,}")
-        print(f"   Subjects  : {total_subjects:,}\n")
+        print(f"   Entities  : {len(self.entity_label):,}")
+        print(f"   Relations : {len(self.relation_label):,}")
+        print(f"   Subjects  : {len(self.index):,}\n")
 
     # ----------------------------------------------------------
     # Load helpers
@@ -76,24 +64,31 @@ class KGRetriever:
                         label_map[qid] = label
         return label_map
 
-    def _load_triple_index(
-        self, filepath: str
-    ) -> Dict[str, List[Tuple[str, str]]]:
-        """
-        Đọc file triple, build index:
-        {subject_QID -> [(relation_ID, object_QID), ...]}
-
-        Định dạng file: subject_QID \t relation_ID \t object_QID
-        """
+    def _load_triple_index(self, filepaths: list) -> dict:
+        from collections import defaultdict
         index = defaultdict(list)
-        with open(filepath, "r", encoding="utf-8") as f:
-            for line in f:
-                parts = line.strip().split("\t")
-                if len(parts) == 3:
-                    subj, rel, obj = parts
-                    index[subj.strip()].append(
-                        (rel.strip(), obj.strip())
-                    )
+        total = 0
+
+        for filepath in filepaths:
+            if not os.path.exists(filepath):
+                print(f"  [SKIP] Không tìm thấy: {filepath}")
+                continue
+
+            print(f"  Loading: {os.path.basename(filepath)}")
+            count = 0
+            with open(filepath, "r", encoding="utf-8") as f:
+                for line in f:
+                    parts = line.strip().split("\t")
+                    if len(parts) == 3:
+                        subj, rel, obj = parts
+                        index[subj.strip()].append(
+                            (rel.strip(), obj.strip())
+                        )
+                        count += 1
+            print(f"  → {count:,} triples")
+            total += count
+
+        print(f"  Tổng: {total:,} triples từ {len(filepaths)} files")
         return dict(index)
 
     # ----------------------------------------------------------
