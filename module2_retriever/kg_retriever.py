@@ -48,19 +48,45 @@ class KGRetriever:
 
     def _load_labels(self, filepath: str) -> Dict[str, str]:
         """
-        Đọc file entity hoặc relation,
-        trả về dict {QID -> label_chính}.
-        Định dạng: QID \t label \t alias1 \t alias2 ...
+        Đọc file entity hoặc relation, trả về dict {QID -> label_tốt_nhất}.
+        
+        File có format: QID \t label1 \t alias1 \t alias2 ...
+        Ưu tiên label viết hoa chữ cái đầu, không phải dạng code (iso, Q...)
         """
         label_map = {}
         with open(filepath, "r", encoding="utf-8") as f:
             for line in f:
                 parts = line.strip().split("\t")
-                if len(parts) >= 2:
-                    qid   = parts[0].strip()
-                    label = parts[1].strip()
-                    if qid and label:
-                        label_map[qid] = label
+                if len(parts) < 2:
+                    continue
+                qid = parts[0].strip()
+                if not qid:
+                    continue
+
+                # Lấy tất cả label/alias (bỏ qua cột QID đầu tiên)
+                candidates = [p.strip() for p in parts[1:] if p.strip()]
+                if not candidates:
+                    continue
+
+                # Chọn label tốt nhất theo thứ tự ưu tiên:
+                # 1. Label có chữ hoa đầu, không phải mã code (iso, Q...), không quá dài
+                best = None
+                for c in candidates:
+                    # Bỏ qua dạng mã code (chữ thường hết, có dấu :, bắt đầu bằng Q+số)
+                    if c.startswith('Q') and c[1:].isdigit():
+                        continue
+                    if ':' in c:
+                        continue
+                    if c.islower() and len(c.split()) == 1:
+                        continue
+                    # Ưu tiên cái có chữ hoa đầu
+                    if c[0].isupper():
+                        best = c
+                        break
+
+                # Fallback: dùng label đầu tiên nếu không tìm được cái tốt
+                label_map[qid] = best if best else candidates[0]
+
         return label_map
 
     def _load_triple_index(self, filepaths: list) -> dict:
