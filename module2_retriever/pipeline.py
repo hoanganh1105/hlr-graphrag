@@ -31,27 +31,26 @@ class Module2Pipeline:
     """
 
     def __init__(
-        self,
-        # Đường dẫn file KG (trên Colab sau khi symlink)
-        triple_file: str   = "/content/WikiRAG/data/Wikidata5M-RE_transductive_train.txt",
-        entity_file: str   = "/content/WikiRAG/data/Wikidata5M-RE_entity.txt",
-        relation_file: str = "/content/WikiRAG/data/Wikidata5M-RE_relation.txt",
-        # Milvus
-        milvus_uri: str         = "/content/milvus_demo.db",
-        milvus_collection: str  = "wikipedia",
-        top_s: int              = 5,
-        # Groq
-        groq_api_key: Optional[str] = None,
-        groq_model: str             = "openai/gpt-oss-20b",
-        # Khác
-        device: str = "cpu",
+    self,
+    triple_files: list,                    # list các file triple cần gộp
+    entity_file: str   = "/content/data/Wikidata5M-RE_entity.txt",
+    relation_file: str = "/content/data/Wikidata5M-RE_relation.txt",
+    # Milvus
+    milvus_uri: str        = "/content/milvus_demo.db",
+    collection_name: str   = "wikipedia",
+    top_s: int             = 5,
+    # Groq
+    groq_api_key: Optional[str] = None,
+    groq_model: str             = "openai/gpt-oss-20b",
+    # Khác
+    device: str = "cpu",
     ):
         print("=" * 55)
         print("Khởi tạo Module 2 Pipeline")
         print("=" * 55)
 
         # Bước 2.1: KG Retriever
-        self.kg = KGRetriever(triple_file, entity_file, relation_file)
+        self.kg = KGRetriever(triple_files, entity_file, relation_file)
 
         # Bước 2.2: Question Generator
         self.qgen = QuestionGenerator(
@@ -62,7 +61,7 @@ class Module2Pipeline:
         # Bước 2.3: Evidence Retriever
         self.evidence = EvidenceRetriever(
             milvus_uri=milvus_uri,
-            collection_name=milvus_collection,
+            collection_name=collection_name,
             top_s=top_s,
             device=device,
         )
