@@ -37,7 +37,6 @@ class KGRetriever:
         self.relation_label = self._load_labels(relation_file)
         print("[3/3] Load triple index (gộp tất cả split)...")
         self.index = self._load_triple_index(triple_files)
-
         print(f"\n✅ KG Retriever sẵn sàng:")
         print(f"   Entities  : {len(self.entity_label):,}")
         print(f"   Relations : {len(self.relation_label):,}")
@@ -68,12 +67,10 @@ class KGRetriever:
         from collections import defaultdict
         index = defaultdict(list)
         total = 0
-
         for filepath in filepaths:
             if not os.path.exists(filepath):
                 print(f"  [SKIP] Không tìm thấy: {filepath}")
                 continue
-
             print(f"  Loading: {os.path.basename(filepath)}")
             count = 0
             with open(filepath, "r", encoding="utf-8") as f:
@@ -81,14 +78,11 @@ class KGRetriever:
                     parts = line.strip().split("\t")
                     if len(parts) == 3:
                         subj, rel, obj = parts
-                        index[subj.strip()].append(
-                            (rel.strip(), obj.strip())
-                        )
+                        index[subj.strip()].append((rel.strip(), obj.strip()))
                         count += 1
             print(f"  → {count:,} triples")
             total += count
-
-        print(f"  Tổng: {total:,} triples từ {len(filepaths)} files")
+        print(f"  Tổng: {total:,} triples")
         return dict(index)
 
     # ----------------------------------------------------------
