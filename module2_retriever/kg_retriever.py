@@ -206,51 +206,37 @@ class KGRetriever:
         entities: List[Entity],
         try_2hop: bool = True,
     ) -> List[KGTriple]:
-        """
-        Hàm chính: nhận danh sách entity từ Module 1,
-        tìm tất cả triple kết nối các entity đó.
-
-        Với mỗi cặp entity có QID hợp lệ:
-          - Thử 1-hop trước
-          - Nếu không có, thử 2-hop (nếu try_2hop=True)
-
-        Trả về list KGTriple không trùng lặp.
-        """
-        # Lọc chỉ lấy entity đã linked thành công
         linked = [e for e in entities if e.qid is not None]
 
         if len(linked) < 2:
-            print("[KG] Không đủ entity để tìm subgraph (cần ít nhất 2).")
+            print("[KG] Không đủ entity.")
             return []
 
-        subgraph: List[KGTriple] = []
-        seen: Set[Tuple] = set()  # tránh triple trùng
+        # Build map QID -> text từ Module 1 (label chuẩn)
+        qid_to_text = {e.qid: e.text for e in linked}
 
-        # Tạo tất cả cặp entity (không thứ tự)
+        subgraph = []
+        seen = set()
         pairs = list(combinations(linked, 2))
         print(f"[KG] Kiểm tra {len(pairs)} cặp entity...")
 
         for ent_a, ent_b in pairs:
             qid_a, qid_b = ent_a.qid, ent_b.qid
-
-            # Thử A → B
             triples = self.find_direct_triple(qid_a, qid_b)
-
-            # Thử B → A nếu A → B không có
             if not triples:
                 triples = self.find_direct_triple(qid_b, qid_a)
-
-            # Thử 2-hop nếu vẫn chưa có
             if not triples and try_2hop:
                 triples = self.find_2hop_triple(qid_a, qid_b)
                 if not triples:
                     triples = self.find_2hop_triple(qid_b, qid_a)
 
-            # Thêm vào subgraph, tránh trùng
             for t in triples:
                 key = (t.subject_qid, t.relation_id, t.object_qid)
                 if key not in seen:
                     seen.add(key)
+                    # Ưu tiên label từ Module 1, fallback về KG label
+                    t.subject_label = qid_to_text.get(t.subject_qid, t.subject_label)
+                    t.object_label  = qid_to_text.get(t.object_qid,  t.object_label)
                     subgraph.append(t)
 
         print(f"[KG] Tìm được {len(subgraph)} triple trong subgraph.\n")
