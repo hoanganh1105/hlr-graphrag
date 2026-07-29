@@ -20,7 +20,6 @@ from data_types import (
 )
 
 from kg_retriever import KGRetriever
-from question_generator import QuestionGenerator
 from evidence_retriever import EvidenceRetriever
 
 
@@ -79,49 +78,63 @@ class Module2Pipeline:
         print(f"[Module 2] Xử lý: {input_text[:80]}...")
         print(f"[Module 2] Số entity nhận được: {len(entities)}\n")
 
-        # --- Bước 2.1: Tìm subgraph trong KG ---
+        # --- Bước 2.1: Tìm subgraph trong KG bằng QID ---
         print("--- Bước 2.1: KG Retrieval ---")
         subgraph = self.kg.retrieve_subgraph(entities)
         coverage = self.kg.compute_kg_coverage(entities, subgraph)
         print(f"KG Coverage: {coverage:.1%}")
 
-        # --- Bước 2.2: Sinh pseudo-question ---
-        print("\n--- Bước 2.2: Sinh pseudo-question ---")
-        entity_label_map = {e.qid: e.text for e in entities if e.qid}
+        # --- Bước 2.2: Query Milvus bằng label entity ---
+        # Không sinh câu hỏi, query thẳng bằng tên entity
+        print("\n--- Bước 2.2: Evidence Retrieval (Milvus) ---")
+        all_passages = []
 
-        if subgraph:
-            # Có subgraph: sinh question từ triple
-            question_triples = self.qgen.generate_from_subgraph(
-                subgraph, entity_label_map
+        # Query theo từng entity có QID
+        linked = [e for e in entities if e.qid is not None]
+        for ent in linked:
+            query_text = ent.text  # dùng thẳng tên entity làm query
+            print(f"  [Milvus] Query entity: {query_text}")
+            passages = self.evidence.query(
+                question=query_text,
+                subject_entity=ent.text,
+                object_entity="",
             )
-        else:
-            # Không có subgraph: sinh question từ cặp entity + claim gốc
-            print("[QGen] Không có triple trong KG, dùng entity pairs...")
-            from itertools import combinations
-            linked = [e for e in entities if e.qid is not None]
-            question_triples = []
-            for ent_a, ent_b in combinations(linked, 2):
-                question = self.qgen.from_entity_pair(ent_a, ent_b, input_text)
-                question_triples.append({
-                    "triple": None,
-                    "question": question,
-                    "entity_a": ent_a.text,
-                    "entity_b": ent_b.text,
-                })
-                print(f"  [Q] {question}")
+            all_passages.extend(passages)
 
-        # --- Bước 2.3: Lấy evidence từ Milvus ---
-        print("\n--- Bước 2.3: Evidence Retrieval (Milvus) ---")
-        evidence_passages = self.evidence.query_batch(question_triples)
+        # Query thêm bằng triple label nếu có subgraph
+        if subgraph:
+            for triple in subgraph:
+                # Dùng "subject relation object" làm query
+                query_text = f"{triple.subject_label} {triple.relation_label} {triple.object_label}"
+                print(f"  [Milvus] Query triple: {query_text[:60]}...")
+                passages = self.evidence.query(
+                    question=query_text,
+                    subject_entity=triple.subject_label,
+                    object_entity=triple.object_label,
+                )
+                all_passages.extend(passages)
+
+        # Sắp xếp theo score, bỏ trùng lặp
+        seen_texts = set()
+        unique_passages = []
+        for p in sorted(all_passages, key=lambda x: x.score, reverse=True):
+            if p.text not in seen_texts:
+                seen_texts.add(p.text)
+                unique_passages.append(p)
+
+        # Cập nhật rank
+        for i, p in enumerate(unique_passages):
+            p.rank = i + 1
+
+        print(f"  [Milvus] Tổng passages unique: {len(unique_passages)}")
 
         # --- Tổng hợp output ---
         stats = {
             "num_entities": len(entities),
-            "num_linked_entities": sum(1 for e in entities if e.qid),
+            "num_linked_entities": len(linked),
             "num_triples_found": len(subgraph),
             "kg_coverage": round(coverage, 4),
-            "num_questions": len(question_triples),
-            "num_passages": len(evidence_passages),
+            "num_passages": len(unique_passages),
         }
 
         print("\n=== Module 2 Done ===")
@@ -132,7 +145,7 @@ class Module2Pipeline:
             input_text=input_text,
             entities=entities,
             subgraph=subgraph,
-            evidence_passages=evidence_passages,
+            evidence_passages=unique_passages,
             kg_coverage=coverage,
             stats=stats,
         )
