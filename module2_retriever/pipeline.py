@@ -51,11 +51,6 @@ class Module2Pipeline:
         # Bước 2.1: KG Retriever
         self.kg = KGRetriever(triple_files, entity_file, relation_file)
 
-        # Bước 2.2: Question Generator
-        self.qgen = QuestionGenerator(
-            api_key=groq_api_key,
-            model=groq_model,
-        )
 
         # Bước 2.3: Evidence Retriever
         self.evidence = EvidenceRetriever(
